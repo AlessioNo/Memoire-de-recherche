@@ -9,11 +9,17 @@ Lancement, depuis la RACINE du projet :
 
     python scripts/nettoyage_donnees.py
 
-Trois parties independantes entre elles (aucune ne lit le resultat d'une autre) :
+Quatre parties independantes entre elles (aucune ne lit le resultat d'une autre) :
   A -- Caracteristiques (datashare.parquet)  -> data/interim/characteristics_clean.parquet
                                                 + data/interim/caracteristiques_retenues.json
   B -- Rendements (StockReturn.parquet)      -> data/interim/returns_clean.parquet
   C -- Macro (MacroData.parquet)             -> data/interim/macro_clean.parquet
+  D -- Facteurs FF5 + MOM (2 CSV Ken French) -> data/interim/facteurs_clean.parquet
+
+⚠️ La partie D est la seule dont la sortie ne sert PAS a predire : les facteurs de Fama-
+French n'entrent jamais dans le panel de modelisation, ils servent uniquement a EVALUER
+les portefeuilles a l'etape 08 (alphas, comparaison de Sharpe). Elle est ici parce que
+c'est l'etape ou l'on transforme du brut en propre, pas parce qu'elle nourrit les modeles.
 
 Tous les parametres viennent de config.py (ANNEE_DEBUT, CARACTERISTIQUES,
 SEUIL_MAX_PCT_MANQUANT_CARACTERISTIQUES, MACRO_PREDICTEURS) : modifie-les LA-BAS,
@@ -36,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 import config
+import facteurs
 import rapports
 
 
@@ -333,6 +340,68 @@ def nettoyer_macro(rap):
 
 
 # ============================================================
+# Partie D -- Facteurs de risque FF5 + momentum (Ken French)
+# ============================================================
+
+def _trouver_csv_french(chemin_attendu):
+    """Retrouve un CSV de Ken French meme si son extension n'a pas la casse attendue.
+
+    Les archives publiees contiennent des fichiers en `.CSV` MAJUSCULE
+    (`F-F_Momentum_Factor.CSV`). Sur Linux et macOS, `Path.exists()` est sensible a la
+    casse : un dezippage fidele produit donc un FileNotFoundError alors que le fichier est
+    bien la, sous le nez de l'utilisateur. Plutot que d'imposer un renommage manuel, on
+    balaye le dossier en comparant les noms en minuscules.
+
+    Renvoie le chemin reellement trouve, ou leve une erreur qui nomme le fichier a
+    telecharger et l'endroit ou le mettre.
+    """
+    if chemin_attendu.exists():
+        return chemin_attendu
+
+    dossier = chemin_attendu.parent
+    if dossier.exists():
+        cible = chemin_attendu.name.lower()
+        for candidat in dossier.iterdir():
+            if candidat.name.lower() == cible:
+                print(f"ℹ️ {candidat.name} utilise (casse differente de {chemin_attendu.name})")
+                return candidat
+
+    raise FileNotFoundError(
+        f"{chemin_attendu} est introuvable.\n"
+        "  Telecharge depuis la Data Library de Ken French :\n"
+        "    - Fama/French 5 Factors (2x3)  -> F-F_Research_Data_5_Factors_2x3_CSV.zip\n"
+        "    - Momentum Factor (Mom)        -> F-F_Momentum_Factor_CSV.zip\n"
+        f"  puis dezippe les DEUX dans {dossier}/ (les variantes _daily ne conviennent pas)."
+    )
+
+
+def nettoyer_facteurs_de_risque(rap):
+    """PARTIE D -- Les 6 series de facteurs, fusionnees et remises en decimal.
+
+    Tout le detail du nettoyage vit dans `facteurs.nettoyer_facteurs` (module de la racine,
+    au meme titre que portefeuilles.py) : cette fonction n'est qu'un point d'entree, pour
+    que la partie D se lance et se rapporte exactement comme A, B et C.
+
+    ⚠️ Pre-requis : les DEUX CSV dezippes dans data/raw/, tels que telecharges depuis la
+    Data Library de Ken French. Ne pas les ouvrir puis les re-enregistrer avec un tableur --
+    celui-ci reformate la premiere colonne et le bloc mensuel n'est plus reconnu.
+    """
+    print("\n" + "=" * 70)
+    print("PARTIE D -- FACTEURS DE RISQUE (FF5 + MOM)")
+    print("=" * 70)
+
+    chemin_ff5 = _trouver_csv_french(config.FICHIER_FACTEURS_FF5_BRUT)
+    chemin_mom = _trouver_csv_french(config.FICHIER_FACTEURS_MOM_BRUT)
+
+    facteurs.nettoyer_facteurs(
+        chemin_ff5,
+        chemin_mom,
+        chemin_sortie=config.FICHIER_FACTEURS_CLEAN,
+        rap=rap,
+    )
+
+
+# ============================================================
 def main():
     config.assurer_dossiers()
     rapports.assurer_dossier()
@@ -348,10 +417,13 @@ def main():
     nettoyer_macro(rap)
     rap.sauvegarder()
 
+    nettoyer_facteurs_de_risque(rap)
+    rap.sauvegarder()
+
     print("\n" + "=" * 70)
     print("ETAPE 02 TERMINEE.")
     print(f"  {len(caracteristiques_gardees)} caracteristiques retenues")
-    print("  3 fichiers ecrits dans data/interim/")
+    print("  4 fichiers ecrits dans data/interim/")
     print("  -> ouvre notebooks/02_nettoyage_donnees.ipynb pour visualiser les resultats")
     print("=" * 70)
 

@@ -192,6 +192,8 @@ MACRO_PREDICTEURS = [
 # ============================================================
 PREDICTEURS = CARACTERISTIQUES_RETENUES
 
+"""[c for c in CARACTERISTIQUES_RETENUES + MACRO_PREDICTEURS if c not in [ "macro_ep", "macro_bm", "macro_ntis", "macro_tbl", "macro_tms", "macro_dfy"]]"""
+
 
 # ------------------------------------------------------------
 # Autres recettes possibles pour PREDICTEURS -- decommente UNE SEULE des lignes
@@ -265,7 +267,7 @@ SEUIL_PERCENTILE_LIQUIDITE = 0.90
 #
 # ⚠️ Parametres GENERAUX (voir journal.py).
 # ============================================================
-TYPE_FENETRE = "expanding"
+TYPE_FENETRE = "rolling"
 # "expanding" : le train GARDE son point de depart d'origine et grandit chaque
 #               annee (il n'oublie jamais rien) -- c'est le choix de GKX (2020).
 # "rolling"   : le train garde une taille FIXE (ANNEES_TRAIN_INITIAL annees) et
@@ -368,7 +370,7 @@ ANNEES_VALIDATION_MINIMUM = 4
 # ci-dessus, ceux-la ne concernent QUE l'Elastic Net -- les enregistrer separement permet
 # au notebook 08 de regrouper les runs en un seul tableau par grille testee.
 # ============================================================
-GRILLE_ALPHA_ELASTIC_NET = np.logspace(-5, -1, 5)        # force de regularisation : 1e-7 a 1e-1 (10 valeurs, echelle log)
+GRILLE_ALPHA_ELASTIC_NET =   [0.0001, 0.001]    #np.logspace(-5, -1, 5)        # force de regularisation : 1e-7 a 1e-1 (10 valeurs, echelle log)
 GRILLE_L1_RATIO_ELASTIC_NET = [0.1,0.3, 0.5, 0.7, 0.9]    # equilibre Lasso (1.0) / Ridge (0.0) : 5 valeurs
 MAX_ITER_ELASTIC_NET = 1000                                # nb max d'iterations de l'optimiseur, par modele candidat de la grille
 
@@ -460,7 +462,7 @@ MAX_FEATURES_ETAPE_A_RANDOM_FOREST = 0.33
 # 0.33 = la regle p/3 de Breiman (2001), defaut historique en regression -- d'ou ce choix
 # comme point de depart. Avec ~30 predicteurs, cela fait ~10 variables tirees par noeud.
 
-GRILLE_MAX_FEATURES_RANDOM_FOREST = [0.66, 1.00]
+GRILLE_MAX_FEATURES_RANDOM_FOREST = [0.33]
 # Valeurs testees a l'etape B, UNE PAR UNE, avec le triplet gagnant de l'etape A.
 # ⚠️ Ne PAS y remettre MAX_FEATURES_ETAPE_A_RANDOM_FOREST : elle serait ignoree de toute
 # facon (deja evaluee a l'etape A), mais autant que la liste dise ce qu'elle fait.
@@ -563,7 +565,7 @@ N_JOBS_RANDOM_FOREST = -1
 # ⚠️ La combinaison se fait sur les PREDICTIONS deja sauvegardees (outputs/predictions_*.parquet),
 # jamais en ré-entrainant quoi que ce soit : le notebook 08 reste un notebook d'evaluation.
 # ============================================================
-MODELES_ENSEMBLE = ['LightGBM', 'Random Forest']
+MODELES_ENSEMBLE = ['LightGBM', 'Random Forest','Regression lineaire', 'Elastic Net']
 # Les modeles a combiner (2 ou plus), avec EXACTEMENT les noms utilises par les scripts :
 # 'Regression lineaire', 'Elastic Net', 'LightGBM', 'Random Forest'.
 # ⚠️ Leurs predictions doivent etre sur le disque, donc les scripts correspondants doivent
@@ -647,6 +649,107 @@ NOM_MODELE_ENSEMBLE = 'Ensemble'
 # predictions deja sauvegardees par 04/05/06 sans rien ré-entrainer)
 # ============================================================
 NB_DECILES = 10  # decile 1 = predictions les plus faibles, decile NB_DECILES = les plus elevees
+
+
+# ============================================================
+# Evaluation factorielle : FF5 + momentum (notebook 08 partie D ; voir facteurs.py)
+#
+# Deux questions DISTINCTES, et il faut les deux dans le memoire :
+#   1. ALPHA      -- le long-short rapporte-t-il ce que les facteurs n'expliquent pas ?
+#                    Regression r_LS,t = alpha + b' F_t + e_t.
+#   2. COMPARAISON -- le long-short fait-il MIEUX qu'un portefeuille construit avec les
+#                    facteurs eux-memes ? Sharpe contre Sharpe, meme tableau.
+# Un alpha positif significatif ET un Sharpe inferieur a celui du momentum seul est un
+# resultat coherent, pas une contradiction : le premier parle de rendement ORTHOGONAL, le
+# second de rendement TOTAL.
+#
+# ⚠️ Ces parametres ne changent aucune prediction, donc aucune cle d'experience : ils ne
+# sont volontairement PAS enregistres au journal, exactement comme ceux de l'etape 10.
+# ============================================================
+LAGS_NEWEY_WEST_ALPHA = 3
+# Nb de retards Newey-West des regressions d'alpha. 3 = convention usuelle sur des
+# rendements mensuels non chevauchants (piste 1 mois).
+# ⚠️ Sur la piste 12 mois, les cohortes de Jegadeesh-Titman partagent 11 douziemes de leurs
+# positions d'un mois sur l'autre : le notebook 11 doit passer HORIZON_PREDICTION_MOIS - 1,
+# pas cette valeur. `facteurs.lags_par_defaut(horizon)` le fait automatiquement.
+
+MODELE_FACTORIEL_REFERENCE = 'FF5+MOM'
+# Le modele dont l'alpha sert de reference dans les tableaux. Les autres cles disponibles
+# ('CAPM', 'FF3', 'FF5') restent calculees : le tableau emboite montre COMBIEN d'alpha
+# chaque bloc de facteurs absorbe, et notamment ce que MOM enleve.
+
+METHODE_BENCHMARK_FACTORIEL = 'equipondere'
+# Comment fabriquer UN portefeuille a partir des 6 facteurs, pour la comparaison Sharpe :
+#   'equipondere'      -- 1/N sur les 6 facteurs. Aucun parametre estime, donc aucun risque
+#                         de look-ahead. C'est le repere honnete par defaut (DeMiguel,
+#                         Garlappi & Uppal 2009).
+#   'variance_inverse' -- poids inversement proportionnels a la variance des facteurs,
+#                         estimee sur les FENETRE_BENCHMARK_FACTORIEL_MOIS mois PASSES.
+#                         Meme logique glissante que ensemble.py.
+# ⚠️ Volontairement PAS de portefeuille tangent estime sur toute la periode : il utiliserait
+# les rendements futurs pour choisir ses poids, et battrait n'importe quel modele par pure
+# construction. Ce serait le repere le plus flatteur et le moins defendable.
+
+FENETRE_BENCHMARK_FACTORIEL_MOIS = 60
+MOIS_MINIMUM_BENCHMARK_FACTORIEL = 24
+# Pour 'variance_inverse' uniquement. Memes valeurs et meme esprit que les parametres
+# homonymes de l'ensemble : 60 mois glissants, repli sur des poids egaux en dessous de 24.
+
+NOM_BENCHMARK_FACTORIEL = 'FF5+MOM (1/N)'
+# Nom sous lequel le portefeuille de facteurs apparait dans le tableau de comparaison.
+
+
+# ------------------------------------------------------------
+# Turnover et couts (notebook 08 partie D ; voir couts.py)
+#
+# DEUX couts, qui ne se confondent pas et ne se reduisent pas par les memes leviers :
+#   TRANSACTION -- se paie quand on BOUGE. Base : le turnover.
+#   EMPRUNT     -- se paie quand on RESTE short. Base : le notionnel vendu, chaque mois.
+# La zone tampon fait baisser le premier en allongeant la detention, donc elle ALLONGE la
+# duree de location de la jambe vendeuse. Un parametre unique melangerait deux effets de
+# signe oppose.
+# ------------------------------------------------------------
+PONDERATIONS_EVALUEES = ['equipondere', 'capitalisation']
+# Quelles constructions passent dans la partie D. L'equipondere est la reference du projet ;
+# la ponderation par capitalisation est le test de robustesse de Gu, Kelly & Xiu (2020), et
+# celui qu'attend la critique d'Avramov, Cheng & Metzker (2023).
+
+COUT_TRANSACTION_BPS = {'equipondere': 40.0, 'capitalisation': 15.0}
+# Cout UNIDIRECTIONNEL proportionnel, en points de base, PAR SCHEMA DE PONDERATION.
+# ⚠️ Valeurs volontairement DIFFERENCIEES. Appliquer le meme chiffre aux deux sous-estime
+# systematiquement le handicap de l'equipondere : Novy-Marx & Velikov (2016) montrent que les
+# couts effectifs varient d'un ordre de grandeur entre grandes et petites capitalisations, et
+# l'equipondere met autant d'argent sur le plus petit titre de l'univers que sur le plus
+# gros. Les niveaux retenus sont des ordres de grandeur post-decimalisation pour un univers
+# deja filtre de son decile le moins liquide ; ils ne remplacent PAS l'analyse de
+# sensibilite, qui est le vrai resultat (voir GRILLE_COUTS_BPS).
+
+COUT_EMPRUNT_ANNUEL_BPS = 30.0
+# Loyer annuel de la jambe vendeuse, en points de base. 20 a 40 pour des titres liquides et
+# largement detenus (`general collateral`).
+# ⚠️ Un taux uniforme sous-estime le cout des titres difficiles a emprunter, et D'Avolio
+# (2002) montre que ce sont precisement ceux qui peuplent les deciles d'anomalie extremes. Le
+# filtre de liquidite de l'etape 03 attenue le probleme sans le supprimer : a dire en note.
+
+TAMPON_DECILES = 0
+# Largeur de la zone tampon, en deciles. 0 reproduit exactement les parties B et C.
+# 1 : on entre au decile 10 mais on ne vend qu'en dessous du decile 9 (`buffering` de
+# Novy-Marx & Velikov). Le SIGNAL du modele est inchange, seule la regle de sortie s'elargit.
+
+IGNORER_PREMIER_MOIS_TURNOVER = True
+# Le premier mois construit les deux jambes a partir de rien : turnover mecanique de 2.0, qui
+# ne dit rien de la strategie. La litterature l'ecarte. False repond a une autre question,
+# celle du cout de MISE EN PLACE, legitime mais distincte.
+
+GRILLE_COUTS_BPS = [0, 5, 10, 20, 30, 50, 75, 100, 150, 200]
+# Grille de l'analyse de sensibilite. Defendre un niveau de cout unique est toujours
+# contestable ; montrer la reponse pour tous les niveaux plausibles ne l'est pas.
+
+SEUIL_T_RENTABILITE = 1.96
+# t-stat visee par `couts.cout_seuil_significativite`. Le cout qui ramene la t-stat a ce
+# seuil est plus bas -- souvent nettement -- que celui qui annule le rendement : retrancher un
+# cout proportionnel au turnover ne fait pas que baisser la moyenne, il ajoute de la variance,
+# puisque le turnover varie d'un mois sur l'autre.
 
 
 # ============================================================
@@ -1019,6 +1122,21 @@ FICHIER_TAILLE_CUMULATIF_PNG = chemins.TAILLE_CUMULATIF_PNG
 FICHIER_TAILLE_SEUILS_PNG = chemins.TAILLE_SEUILS_PNG
 FICHIER_BENCHMARKS = chemins.BENCHMARKS
 FICHIER_BENCHMARKS_PNG = chemins.BENCHMARKS_PNG
+
+FICHIER_FACTEURS_FF5_BRUT = chemins.FACTEURS_FF5_BRUT
+FICHIER_FACTEURS_MOM_BRUT = chemins.FACTEURS_MOM_BRUT
+FICHIER_FACTEURS_CLEAN = chemins.FACTEURS_CLEAN
+FICHIER_ALPHAS_PORTEFEUILLES = chemins.ALPHAS_PORTEFEUILLES
+FICHIER_COMPARAISON_FACTEURS = chemins.COMPARAISON_FACTEURS
+FICHIER_PERFORMANCE_FACTEURS = chemins.PERFORMANCE_FACTEURS
+FICHIER_RENDEMENTS_BENCHMARK_FACTORIEL = chemins.RENDEMENTS_BENCHMARK_FACTORIEL
+FICHIER_ALPHAS_PNG = chemins.ALPHAS_PNG
+FICHIER_FACTEURS_CUMULATIF_PNG = chemins.FACTEURS_CUMULATIF_PNG
+FICHIER_TURNOVER_PORTEFEUILLES = chemins.TURNOVER_PORTEFEUILLES
+FICHIER_COUTS_PORTEFEUILLES = chemins.COUTS_PORTEFEUILLES
+FICHIER_SEUILS_RENTABILITE = chemins.SEUILS_RENTABILITE
+FICHIER_SENSIBILITE_COUTS = chemins.SENSIBILITE_COUTS
+FICHIER_SENSIBILITE_COUTS_PNG = chemins.SENSIBILITE_COUTS_PNG
 
 def fichiers_horizon(cle_modele, horizon=None):
     """Chemins de sortie d'un modele pour l'horizon long. Conserve pour le notebook 11.

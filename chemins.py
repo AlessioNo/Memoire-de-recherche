@@ -57,9 +57,18 @@ CARACTERISTIQUES_BRUT = DATA_RAW / "datashare.parquet"
 RETURNS_BRUT = DATA_RAW / "StockReturn.parquet"
 MACRO_BRUT = DATA_RAW / "MacroData.parquet"
 
+# Facteurs de risque de la Data Library de Ken French. Deux CSV a dezipper a la main dans
+# data/raw/, comme les 3 fichiers ci-dessus (dossier non versionne).
+#   F-F_Research_Data_5_Factors_2x3_CSV.zip  -> MKT-RF, SMB, HML, RMW, CMA, RF
+#   F-F_Momentum_Factor_CSV.zip              -> MOM
+# ⚠️ Ils ne servent JAMAIS a predire : ce sont des series d'EVALUATION (etape 08).
+FACTEURS_FF5_BRUT = DATA_RAW / "F-F_Research_Data_5_Factors_2x3.csv"
+FACTEURS_MOM_BRUT = DATA_RAW / "F-F_Momentum_Factor.csv"
+
 CARACTERISTIQUES_CLEAN = DATA_INTERIM / "characteristics_clean.parquet"
 RETURNS_CLEAN = DATA_INTERIM / "returns_clean.parquet"
 MACRO_CLEAN = DATA_INTERIM / "macro_clean.parquet"
+FACTEURS_CLEAN = DATA_INTERIM / "facteurs_clean.parquet"
 CARACTERISTIQUES_RETENUES = DATA_INTERIM / "caracteristiques_retenues.json"
 
 PANEL_FINAL = DATA_PROCESSED / "panel_final.parquet"
@@ -179,3 +188,22 @@ TAILLE_SEUILS_PNG = sortie("analyse_taille_evolution_capitalisations", "png")
 
 BENCHMARKS = sortie("benchmarks_portefeuilles")
 BENCHMARKS_PNG = sortie("portefeuilles_vs_benchmarks", "png")
+
+# Evaluation factorielle (notebook 08 partie D). Fichiers SEPARES de
+# performance_portefeuilles.parquet et de l'historique : ils ne dependent d'aucune
+# prediction nouvelle et n'alimentent donc PAS le journal des experiences -- ajouter des
+# colonnes d'alpha a journal.COLONNES_PORTEFEUILLE rendrait l'historique deja ecrit
+# inconcatenable avec les lignes futures.
+ALPHAS_PORTEFEUILLES = sortie("alphas_portefeuilles")
+COMPARAISON_FACTEURS = sortie("comparaison_modeles_vs_facteurs")
+PERFORMANCE_FACTEURS = sortie("performance_facteurs")
+RENDEMENTS_BENCHMARK_FACTORIEL = sortie("rendements_benchmark_factoriel")
+
+TURNOVER_PORTEFEUILLES = sortie("turnover_portefeuilles")
+COUTS_PORTEFEUILLES = sortie("performance_brute_vs_nette")
+SEUILS_RENTABILITE = sortie("couts_seuils_rentabilite")
+SENSIBILITE_COUTS = sortie("sensibilite_aux_couts")
+
+ALPHAS_PNG = sortie("portefeuilles_alphas_factoriels", "png")
+FACTEURS_CUMULATIF_PNG = sortie("portefeuilles_vs_facteurs_richesse_cumulee", "png")
+SENSIBILITE_COUTS_PNG = sortie("portefeuilles_sensibilite_couts", "png")

@@ -63,7 +63,7 @@ def annee_decimale(annee_mois):
 
 
 def tracer(liste_fenetres, chemin_sortie):
-    hauteur = 1.6 + 0.85 * len(liste_fenetres)
+    hauteur = 1.6 + 0.2 * len(liste_fenetres)
     fig, ax = plt.subplots(figsize=(9.5, hauteur))
 
     for rang, f in enumerate(liste_fenetres):
@@ -71,7 +71,7 @@ def tracer(liste_fenetres, chemin_sortie):
         for bloc in ("train", "validation", "test"):
             debut = annee_decimale(f[bloc][0])
             fin = annee_decimale(f[bloc][-1]) + 1 / 12
-            ax.barh(y, fin - debut, left=debut, height=0.52,
+            ax.barh(y, fin - debut, left=debut, height=0.80,
                     color=COULEURS[bloc], edgecolor="white", linewidth=0.8, zorder=3)
             if rang == 0:
                 ax.text((debut + fin) / 2, y, ETIQUETTES[bloc],
@@ -100,13 +100,13 @@ def tracer(liste_fenetres, chemin_sortie):
     ax.spines["bottom"].set_color("#999999")
     ax.tick_params(axis="both", length=0)
 
-    legende = [Patch(facecolor=COULEURS[b], label=t) for b, t in [
+    """legende = [Patch(facecolor=COULEURS[b], label=t) for b, t in [
         ("train", "Entraînement (estimation des paramètres)"),
         ("validation", "Validation (choix des hyperparamètres)"),
         ("test", "Test (utilisé une seule fois)"),
     ]]
-    ax.legend(handles=legende, loc="upper center", bbox_to_anchor=(0.5, -0.16),
-              ncol=1, frameon=False, fontsize=9, handlelength=1.4, handleheight=1.0)
+    ax.legend(handles=legende, loc="upper center", bbox_to_anchor=(0.5, 0),
+              ncol=1, frameon=False, fontsize=9, handlelength=1.4, handleheight=1.0)"""
 
     fig.tight_layout()
     fig.savefig(chemin_sortie, bbox_inches="tight")

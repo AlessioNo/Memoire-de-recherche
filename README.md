@@ -39,6 +39,15 @@ lancement, avec les 3 fichiers sources :
 - `datashare.parquet` — les 94 caractéristiques d'entreprise candidates (univers GKX)
 - `StockReturn.parquet` — rendements mensuels par titre
 - `MacroData.parquet` — les 8 prédicteurs macroéconomiques
+- `F-F_Research_Data_5_Factors_2x3.csv` — MKT-RF, SMB, HML, RMW, CMA (Ken French)
+- `F-F_Momentum_Factor.csv` — MOM (Ken French)
+
+Les deux derniers se téléchargent depuis la Data Library de Ken French
+(`F-F_Research_Data_5_Factors_2x3_CSV.zip` et `F-F_Momentum_Factor_CSV.zip`) et se
+dézippent tels quels. ⚠️ Ne pas les ouvrir puis les ré-enregistrer avec un tableur : celui-ci
+reformate la première colonne, et le bloc mensuel n'est alors plus reconnu au nettoyage.
+Contrairement aux trois premiers, ils **ne servent jamais à prédire** — ce sont des séries
+d'évaluation, consommées uniquement par le notebook 08 (alphas et comparaison de Sharpe).
 
 Le notebook `01_exploration.ipynb` sert uniquement à inspecter ces fichiers bruts, sans
 jamais les modifier. Le nettoyage proprement dit commence à l'étape 02.
@@ -487,7 +496,9 @@ Premier coup d'œil aux 3 fichiers bruts, sans rien modifier.
 
 **02 — Nettoyage des données**
 Partie A caractéristiques (+ filtre automatique des candidates trop incomplètes, section
-A.3bis), Partie B rendements, Partie C macro — 3 nettoyages indépendants.
+A.3bis), Partie B rendements, Partie C macro, Partie D facteurs FF5 + MOM — 4 nettoyages
+indépendants. La partie D remet les facteurs de Ken French en décimal (ils sont publiés en
+pourcentage) et fusionne les deux CSV en un seul fichier mensuel.
 - Script : `scripts/nettoyage_donnees.py`
 - Entrée : `data/raw/*`
 - Sortie : `data/interim/*` (+ `caracteristiques_retenues.json`) + rapport `02_nettoyage`
@@ -550,12 +561,31 @@ Partie A comparaison du R²_oos (pooled + évolution par fenêtre), Partie B por
 long-short par décile (Sharpe, Sortino, drawdown...) à partir des prédictions déjà
 sauvegardées, taguées avec `cle_experience` et **ajoutées** (sans rien écraser) à
 l'historique cumulatif pour le notebook 09, **Partie C portefeuille combiné** (voir la
-section dédiée plus haut), Synthèse R²_oos vs Sharpe — toujours le **dernier** modèle
-entraîné de chaque type.
-- Entrée : `outputs/resultats_*.parquet`, `outputs/predictions_*.parquet`
+section dédiée plus haut), **Partie D évaluation factorielle FF5 + MOM**, Synthèse R²_oos vs
+Sharpe — toujours le **dernier** modèle entraîné de chaque type.
+- Entrée : `outputs/resultats_*.parquet`, `outputs/predictions_*.parquet`,
+  `data/interim/facteurs_clean.parquet`
 - Sortie : `outputs/*`, dont `outputs/performance_portefeuilles.parquet` (instantané),
   `outputs/historique_performance_portefeuilles.parquet` (cumulatif),
-  `outputs/predictions_ensemble.parquet` et `outputs/poids_ensemble_par_mois.parquet`
+  `outputs/predictions_ensemble.parquet`, `outputs/poids_ensemble_par_mois.parquet`,
+  `outputs/alphas_portefeuilles.parquet` et
+  `outputs/comparaison_modeles_vs_facteurs.parquet`
+
+La **partie D** répond à deux questions qu'il ne faut pas confondre. L'**alpha** demande si
+le long-short rapporte ce que les facteurs n'expliquent pas : régression
+`r_LS,t = α + β' F_t + ε_t`, écarts-types Newey-West, modèles emboîtés CAPM → FF3 → FF5 →
+FF5+MOM. La **comparaison** demande si le long-short fait mieux qu'un portefeuille construit
+avec les facteurs eux-mêmes : Sharpe contre Sharpe, dans un tableau unique où les quatre
+modèles, l'ensemble, le 1/N factoriel et chaque facteur isolé occupent des lignes
+comparables. Un alpha positif significatif accompagné d'un Sharpe inférieur à celui du
+momentum seul est cohérent : rendement orthogonal et rendement total sont deux grandeurs
+différentes. Toute la logique vit dans `facteurs.py` (racine), les paramètres dans
+`config.py`, section « Évaluation factorielle ».
+
+⚠️ Ces sorties ne passent **pas** par le journal des expériences. Elles ne dépendent
+d'aucune prédiction nouvelle, et ajouter des colonnes d'alpha à
+`journal.COLONNES_PORTEFEUILLE` rendrait l'historique déjà écrit inconcaténable avec les
+lignes futures. Même traitement que `performance_constructions.parquet`.
 
 **09 — Comparaison des expériences** (notebook seul)
 Compare **tous** les lancements passés de 04/05/06/07 entre eux (R²_oos, temps
