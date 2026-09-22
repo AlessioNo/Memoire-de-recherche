@@ -498,11 +498,3 @@ facteur ~15 sur la variance) : la comparaison passe par le **rank-IC** et le **S
 
 ---
 
-## Références
-
-- Gu, S., Kelly, B., & Xiu, D. (2020). *Empirical Asset Pricing via Machine Learning.*
-  Review of Financial Studies.
-- Bates, J. M., & Granger, C. W. J. (1969). *The Combination of Forecasts.*
-- Granger, C. W. J., & Ramanathan, R. (1984). *Improved Methods of Combining Forecasts.*
-- Smith, J., & Wallis, K. F. (2009). *A Simple Explanation of the Forecast Combination Puzzle.*
-- Shumway, T. (1997). *The Delisting Bias in CRSP Data.*
